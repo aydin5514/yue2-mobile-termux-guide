@@ -38,6 +38,8 @@ cmake --build . -j6
 cd ..
 ```
 
+The upstream repo also ships a `buildtermux.sh`. I built with plain `cmake` as above and did not compare the two, so check it too.
+
 ## 3. Get the models
 
 Models are hosted at [Serveurperso/YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF). They are **not** redistributed here.
@@ -96,7 +98,7 @@ Caveats: single phone, single song, and the phone heats up during runs, so expec
 
 ### 4.3 Reuse the score and semantic tokens
 
-The request JSON accepts two optional fields:
+As described in the [upstream README](https://github.com/ServeurpersoCom/yue2.cpp), the request JSON accepts two optional fields (this is an upstream feature; I only built a workflow around it):
 
 - `"abc"`: a score (ABC text). If set, the slow score stage is skipped.
 - `"semantic_tokens"`: comma-separated integers. If set, the semantic stage is skipped (replay).
@@ -156,3 +158,4 @@ Songs are rendered into `~/yue2.cpp/songs/<date>/` and copied to your Download f
 - yue2.cpp: MIT, by Serveurperso.
 - YuE2 model weights: by M-A-P, licensed under **CC BY-NC 4.0** according to the GGUF page. Some projects mention an additional permission for individual creators; read the official license of the weights yourself before using generated songs commercially.
 - Links: [yue2.cpp](https://github.com/ServeurpersoCom/yue2.cpp), [YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF).
+- 
