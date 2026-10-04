@@ -158,4 +158,3 @@ Songs are rendered into `~/yue2.cpp/songs/<date>/` and copied to your Download f
 - yue2.cpp: MIT, by Serveurperso.
 - YuE2 model weights: by M-A-P, licensed under **CC BY-NC 4.0** according to the GGUF page. Some projects mention an additional permission for individual creators; read the official license of the weights yourself before using generated songs commercially.
 - Links: [yue2.cpp](https://github.com/ServeurpersoCom/yue2.cpp), [YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF).
-- 
