@@ -35,6 +35,8 @@ cmake --build . -j6
 cd ..
 ```
 
+ریپوی اصلی خودش یک اسکریپت `buildtermux.sh` هم دارد. من با همان دستورهای بالا بیلد کردم و این دو را با هم مقایسه نکرده‌ام، پس آن را هم ببین.
+
 ## ۳. مدل‌ها
 
 مدل‌ها از [Serveurperso/YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF) گرفته می‌شوند و اینجا بازنشر نشده‌اند. من با Chrome دانلود کردم (برای کنترل اینترنت) و کپی کردم:
@@ -60,7 +62,7 @@ sha256sum models/*.gguf
 
 - **تعداد ترد:** پیش‌فرض پروژه `hardware_concurrency()/2` است (۴ ترد روی گوشی ۸ هسته‌ای). `scripts/apply-patches.sh` متغیر `YUE_THREADS` را اضافه می‌کند.
 - **قفل روی هسته‌های قوی:** با `taskset -c 2-7` (روی گوشی من cpu0 و cpu1 کندترند).
-- **استفاده دوباره از score و توکن‌ها:** فیلد `abc` مرحله score و فیلد `semantic_tokens` مرحله semantic را رد می‌کنند.
+- **استفاده دوباره از score و توکن‌ها:** فیلد `abc` مرحله score و فیلد `semantic_tokens` مرحله semantic را رد می‌کنند. این قابلیت را [README ریپوی اصلی](https://github.com/ServeurpersoCom/yue2.cpp) هم توضیح داده؛ من فقط یک روند کاری دورش ساختم.
 - **ذخیره میانی:** پچ دوم هر ۱۰۰ توکن semantic را در `semantic_partial.csv` می‌نویسد، تا اگر اندروید Termux را بست، بشود بخش تولیدشده را رندر کرد.
 
 ### بنچمارک (فقط NAR، یک آهنگ، ۴ مرحله)
