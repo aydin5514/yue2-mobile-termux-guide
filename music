@@ -1,0 +1,106 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Interactive launcher for yue2.cpp on Termux.
+# Needs the patches from apply-patches.sh (YUE_THREADS, semantic_partial.csv).
+# Set YUE_CORES to the fast cores of your phone (default 2-7).
+cd "$HOME/yue2.cpp" || { echo "yue2.cpp not found"; exit 1; }
+ROOT="$PWD"
+PIN="taskset -c ${YUE_CORES:-2-7}"
+echo "== YuE2 =="
+mapfile -t M < <(ls models/YuE2-3B-*.gguf 2>/dev/null)
+[ ${#M[@]} -eq 0 ] && { echo "no model in models/"; exit 1; }
+MODEL="$ROOT/${M[0]}"
+VAE="$ROOT/models/YuE2-Vae-F32.gguf"
+echo "1) WebUI server"
+echo "2) New song (CLI)"
+echo "3) Re-render a saved song"
+echo "4) Render from interrupted song (partial)"
+read -p "Choose [1]: " MODE; MODE=${MODE:-1}
+read -p "CPU threads [6]: " N; N=${N:-6}
+export YUE_THREADS=$N
+termux-wake-lock
+trap 'termux-wake-unlock; exit' INT TERM
+
+if [ "$MODE" = 1 ]; then
+  read -p "max-seq [8192]: " S; S=${S:-8192}
+  read -p "Cover/transcribe (SheetSage2)? [Y/n]: " a
+  T=(); case "${a:-y}" in n|N) ;; *) T=(--transcriber "$ROOT/models/SheetSage2-Q8_0.gguf");; esac
+  read -p "Access: 1) this phone only  2) Wi-Fi [1]: " a
+  if [ "${a:-1}" = 2 ]; then H=0.0.0.0; else H=127.0.0.1; fi
+  read -p "Port [8087]: " P; P=${P:-8087}
+  $PIN "$ROOT/build/yue-server" --host "$H" --port "$P" --model "$MODEL" --vae "$VAE" "${T[@]}" --max-seq "$S" &
+  PID=$!
+  trap 'kill $PID 2>/dev/null; termux-wake-unlock; exit' INT TERM
+  if [ "$H" = 0.0.0.0 ]; then
+    IP=$(ip -4 addr show wlan0 2>/dev/null | grep -oE 'inet [0-9.]+' | cut -d' ' -f2)
+    [ -n "$IP" ] && echo "Wi-Fi link: http://$IP:$P"
+  fi
+  sleep 5
+  echo "Link: http://localhost:$P"
+  termux-open-url "http://localhost:$P"
+  wait $PID
+
+elif [ "$MODE" = 2 ]; then
+  read -p "Style (e.g. soft piano, calm): " STYLE
+  echo "Lyrics, line by line (e.g. [verse] first). Empty line to finish:"
+  L=""
+  while IFS= read -r line; do [ -z "$line" ] && break; L+="$line"$'\n'; done
+  read -p "Duration seconds [10]: " D; D=${D:-10}
+  read -p "NAR steps [12]: " ST; ST=${ST:-12}
+  read -p "max-seq (~25 per second + 4000) [8192]: " MS; MS=${MS:-8192}
+  read -p "Seed [random]: " LS; LS=${LS:-$RANDOM}
+  DIR="$ROOT/songs/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$DIR"
+  echo "$MS" > "$DIR/maxseq"
+  STYLE="$STYLE" LYR="$L" DUR="$D" STEPS="$ST" LMSEED="$LS" OUT="$DIR/req.json" python3 - << 'PY'
+import json, os
+r = {"style": os.environ["STYLE"], "lyrics": os.environ["LYR"],
+     "duration": float(os.environ["DUR"]), "lm_seed": int(os.environ["LMSEED"]),
+     "steps": int(os.environ["STEPS"])}
+json.dump(r, open(os.environ["OUT"], "w"))
+PY
+  cd "$DIR"
+  echo "--- 1/2 score ---"
+  $PIN "$ROOT/build/yue-plan" --model "$MODEL" --request req.json --out score.abc --max-seq "$MS" || exit 1
+  python3 -c "import json; r=json.load(open('req.json')); r['abc']=open('score.abc').read(); json.dump(r,open('req2.json','w'))"
+  echo "--- 2/2 synth (semantic saved every 100 tokens) ---"
+  $PIN "$ROOT/build/yue-synth" --model "$MODEL" --vae "$VAE" --request req2.json --out song.mp3 --tokens tokens.csv --max-seq "$MS" || { echo "Interrupted/failed. Use option 4 to render what was saved."; exit 1; }
+  python3 -c "import json; r=json.load(open('req2.json')); r['semantic_tokens']=open('tokens.csv').read(); json.dump(r,open('req3.json','w'))"
+  rm -f semantic_partial.csv
+  NAME=$(basename "$DIR")
+  cp song.mp3 ~/storage/downloads/yue-$NAME.mp3 2>/dev/null
+  echo "--- done --- Download/yue-$NAME.mp3"
+  read -p "Keep files for re-render (option 3)? [y/N]: " K
+  cd "$ROOT"
+  case "$K" in y|Y) echo "Kept: $DIR";; *) rm -rf "$DIR"; echo "Cleaned up.";; esac
+
+elif [ "$MODE" = 3 ]; then
+  mapfile -t D < <(ls -d songs/*/ 2>/dev/null)
+  [ ${#D[@]} -eq 0 ] && { echo "no saved songs"; termux-wake-unlock; exit 1; }
+  for i in "${!D[@]}"; do echo "  $((i+1))) ${D[$i]}"; done
+  read -p "Choose [${#D[@]}]: " a; a=${a:-${#D[@]}}
+  DIR="$ROOT/${D[$((a-1))]%/}"
+  MS=$(cat "$DIR/maxseq" 2>/dev/null || echo 8192)
+  read -p "NAR steps [12]: " ST; ST=${ST:-12}
+  read -p "Seed [random]: " SD; SD=${SD:-$RANDOM}
+  OUT="$DIR/render-$SD.mp3"
+  $PIN "$ROOT/build/yue-synth" --model "$MODEL" --vae "$VAE" --request "$DIR/req3.json" --out "$OUT" --steps "$ST" --seed "$SD" --max-seq "$MS" || exit 1
+  cp "$OUT" ~/storage/downloads/yue-$(basename "$DIR")-$SD.mp3 2>/dev/null
+  echo "Saved: $OUT  (also in Download)"
+
+elif [ "$MODE" = 4 ]; then
+  mapfile -t D < <(ls -d songs/*/ 2>/dev/null)
+  P=()
+  for d in "${D[@]}"; do [ -f "$d/semantic_partial.csv" ] && P+=("$d"); done
+  [ ${#P[@]} -eq 0 ] && { echo "no interrupted songs"; termux-wake-unlock; exit 1; }
+  for i in "${!P[@]}"; do echo "  $((i+1))) ${P[$i]}  ($(tr ',' '\n' < "${P[$i]}semantic_partial.csv" | wc -l) frames)"; done
+  read -p "Choose [${#P[@]}]: " a; a=${a:-${#P[@]}}
+  DIR="$ROOT/${P[$((a-1))]%/}"
+  MS=$(cat "$DIR/maxseq" 2>/dev/null || echo 8192)
+  read -p "NAR steps [12]: " ST; ST=${ST:-12}
+  python3 -c "import json,sys; d=sys.argv[1]; r=json.load(open(d+'/req2.json')); r['semantic_tokens']=open(d+'/semantic_partial.csv').read(); json.dump(r,open(d+'/req_p.json','w'))" "$DIR"
+  OUT="$DIR/partial.mp3"
+  $PIN "$ROOT/build/yue-synth" --model "$MODEL" --vae "$VAE" --request "$DIR/req_p.json" --out "$OUT" --steps "$ST" --max-seq "$MS" || exit 1
+  cp "$OUT" ~/storage/downloads/yue-$(basename "$DIR")-partial.mp3 2>/dev/null
+  echo "Saved: $OUT  (also in Download)"
+fi
+termux-wake-unlock
