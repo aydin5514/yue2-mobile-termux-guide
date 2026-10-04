@@ -134,7 +134,7 @@ The script changes `src/backend.h` (`YUE_THREADS`) and `src/generate.h` (partial
 
 ## 6. The `music` launcher
 
-`scripts/music` is an interactive menu (WebUI server, new song, re-render, render from interrupted song). Install:
+`scripts/music` is an interactive menu: WebUI server, new song (CLI), re-render a saved song, render from an interrupted song, and cover from an audio file (CLI). Install:
 
 ```bash
 cp scripts/music $PREFIX/bin/music && chmod +x $PREFIX/bin/music
@@ -144,6 +144,10 @@ music
 Set `YUE_CORES` for your own phone (default `2-7`), for example `YUE_CORES=0-7 music`.
 
 Songs are rendered into `~/yue2.cpp/songs/<date>/` and copied to your Download folder as MP3.
+
+Notes:
+- **Re-render (option 3)** reuses the saved score and semantic tokens, so answer `y` to "Keep files" when you make a draft. It defaults to the original seed, and the output name includes seed and steps. A rendered MP3 cannot be re-rendered: each render starts from noise and the saved tokens, not from the audio file.
+- **Cover (option 5)** transcribes an audio file (WAV or MP3 from your Download folder) to a score with `yue-transcribe` and `SheetSage2`, then generates a new song from it. In my one test it picked up the structure of the original but reinterpreted it rather than copying it. Only use audio you have the rights to. I tested it only once, so expect rough edges.
 
 ## 7. Things that did not work or need care
 
